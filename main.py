@@ -1,8 +1,11 @@
 import io
 import json
 import os
+import base64
+import re
 
 from PIL import Image
+import flask
 from flask import Flask, jsonify, request
 import torch
 
@@ -30,7 +33,7 @@ net.eval()
 # Transform input into the form our model expects
 def transform_image(image_bytes):
     transform = xception_data_transforms['test']
-    image = Image.open(image_bytes)
+    image = Image.open(image_bytes).convert('RGB')
     tensor_img = transform(image)
     tensor_img.unsqueeze_(0)  # batch 1
     return tensor_img
@@ -52,12 +55,20 @@ def root():
 @app.route('/predict', methods=['POST'])
 def predict():
     if request.method == 'POST':
-        file = request.files['file']
+        file = request.form['img']
         if file is not None:
+            temp = re.sub('^data:image/.+;base64,', '', file)
+            file = io.BytesIO(base64.b64decode(temp))
             tensor_img = transform_image(file)
             prediction = get_prediction(tensor_img)
-            return jsonify({'pred_result': int(prediction)})
+            response = jsonify({'pred_result': int(prediction)})
+            response.headers.add('Access-Control-Allow-Origin', 'http://localhost/')
+            return response
+        else:
+            response = jsonify({'msg': 'File Error. Please Check file is image.'})
+            response.headers.add('Access-Control-Allow-Origin', 'http://localhost/')
+            return response
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0')
+    app.run(host='0.0.0.0', port=80)
