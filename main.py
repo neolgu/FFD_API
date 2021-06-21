@@ -1,12 +1,9 @@
 import io
-import json
-import os
 import base64
 import re
 
 from PIL import Image
-import flask
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, Response
 import torch
 
 from network.conf import ConfModel
@@ -24,7 +21,7 @@ else:
 
 net = ConfModel(num_classes=2)
 net.to(device)
-net.load_state_dict(torch.load("checkpoint\\conf\\17.tar"))
+net.load_state_dict(torch.load("checkpoint/conf/17.tar", map_location=torch.device('cpu')))
 net.eval()
 
 # print(net)
@@ -43,8 +40,8 @@ def transform_image(image_bytes):
 def get_prediction(input_tensor):
     outputs = net.forward(input_tensor)
     _, preds = outputs.max(1)
-    print(outputs)
-    return preds
+    probability = torch.sigmoid(outputs).tolist()[0]
+    return preds, probability[int(preds)]
 
 
 @app.route('/', methods=['GET'])
@@ -60,15 +57,15 @@ def predict():
             temp = re.sub('^data:image/.+;base64,', '', file)
             file = io.BytesIO(base64.b64decode(temp))
             tensor_img = transform_image(file)
-            prediction = get_prediction(tensor_img)
-            response = jsonify({'pred_result': int(prediction)})
-            response.headers.add('Access-Control-Allow-Origin', 'http://localhost/')
+            prediction, probability = get_prediction(tensor_img)
+            response = jsonify({'pred_result': int(prediction), 'pred_probability': probability})
+            response.headers.add("Access-Control-Allow-Origin", "*")
             return response
         else:
             response = jsonify({'msg': 'File Error. Please Check file is image.'})
-            response.headers.add('Access-Control-Allow-Origin', 'http://localhost/')
+            response.headers.add('Access-Control-Allow-Origin',  "*")
             return response
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=80)
+    app.run(host='0.0.0.0', port=5001)
